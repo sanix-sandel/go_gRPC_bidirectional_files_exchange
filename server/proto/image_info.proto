@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package proto;
+
+import "google/protobuf/wrappers.proto";
+
+
+//for uploading image
+message UploadImageRequest{
+    oneof data{
+        ImageInfo info=1;
+        bytes chunkdata=2;
+    };
+}
+
+message ImageInfo {
+    string name=1;
+    string image_type = 2;
+}
+  
+message UploadImageResponse {
+    string name = 1;
+    uint32 size = 2;
+}
+/*
+//for list of all images
+message ImageList{
+    repeated ImageInfo images= 1;
+}
+
+//for downloading image
+message DownloadImageRequest{
+    string name=1;
+}
+
+message DownloadImageResponse{
+    oneof data{
+        ImageInfo info=1;
+        bytes chunkdata=2;
+    }
+}
+*/
+service ImageUploadService{
+    rpc UploadImage(stream UploadImageRequest)returns (UploadImageResponse){};
+  //  rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
+   // rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
+
+}
