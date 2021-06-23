@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
+	"os"
 	pb "tages/service/proto"
 
 	"google.golang.org/grpc"
@@ -14,6 +16,12 @@ const (
 
 func main() {
 	lis, err := net.Listen("tcp", port)
+
+	//create files directory
+	err := os.Mkdir("files", 0777)
+	if err != nil {
+		fmt.Println("Directry already exists")
+	}
 
 	if err != nil {
 		log.Fatal("failed to listen: %v", err)

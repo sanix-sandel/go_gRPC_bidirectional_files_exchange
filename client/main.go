@@ -11,16 +11,20 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
 	pb "tages/client/proto"
 	"time"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 )
 
 const (
 	address = "localhost:50051"
 )
+
+var mutex = &sync.Mutex{}
 
 func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 	uploadImage(imageClient, "tmp/javascript.png")
@@ -29,6 +33,12 @@ func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 }
 
 func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
+
+	//rate limiting
+	var limiter = rate.NewLimiter(10, 1)
+
+	mutex.Lock()
+
 	file, err := os.Open(imagePath)
 
 	if err != nil {
@@ -45,6 +55,9 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	if err := limiter.Wait(ctx); err != nil {
+		fmt.Println("Request exceeded")
+	}
 	stream, err := imageClient.UploadImage(ctx)
 
 	if err != nil {
@@ -99,6 +112,7 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 		log.Fatal("cannot receive response: ", err)
 	}
 
+	mutex.Unlock()
 	log.Printf("image uploaded with name: %s, size: %d", res.GetName(), res.GetSize())
 }
 
@@ -120,15 +134,40 @@ func Save(imageName string, imageData bytes.Buffer) (string, error) {
 	return imageName, nil
 }
 
+func getImagesList(imageClient pb.ImageUploadServiceClient) {
+
+	var limiter = rate.NewLimiter(100, 1)
+
+	//list all images
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+
+	//limiting
+	if err := limiter.Wait(ctx); err != nil {
+		fmt.Println("Request exceeded")
+	}
+	defer cancel()
+	r, err := imageClient.ListImages(ctx, &wrappers.StringValue{Value: ""})
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(r)
+}
+
 func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
 
 	/*req, err:=stream.Recv()
 	if err!=nil{
 		return
 	}*/
+	//rate limiting
+	mutex.Lock()
+	var limiter = rate.NewLimiter(10, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if err := limiter.Wait(ctx); err != nil {
+		fmt.Println("Request exceeded")
+	}
 
 	stream, err := imageClient.DownloadImage(ctx, &wrappers.StringValue{Value: filename})
 	if err != nil {
@@ -149,7 +188,7 @@ func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
 		chunk := res.GetChunkdata()
 		size := len(chunk)
 
-		log.Println("chunck of %d received", size)
+		log.Printf("chunck of %d received", size)
 
 		if err == io.EOF {
 			log.Println("No more date to receive")
@@ -166,7 +205,7 @@ func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
 	if err != nil {
 		fmt.Printf("cannot save image to the store: %v", err)
 	}
-
+	mutex.Unlock()
 	fmt.Printf("Downloaded image with name %s", imageName)
 
 }
@@ -180,20 +219,27 @@ func main() {
 
 	defer conn.Close()
 
-	c := pb.NewImageUploadServiceClient(conn)
-	testUploadImage(c)
-
-	//list all images
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	r, err := c.ListImages(ctx, &wrappers.StringValue{Value: ""})
+	err = os.Mkdir("tmp", 0777)
 	if err != nil {
-		log.Println(err)
+		log.Println("Directory tmp already exists")
 	}
-	log.Println(r)
+	err = os.Mkdir("files", 0777)
+	if err != nil {
+		log.Println("Directory files already exists")
+	}
+
+	c := pb.NewImageUploadServiceClient(conn)
+
+	for i := 0; i < 20; i++ {
+
+		go getImagesList(c)
+	}
+
+	testUploadImage(c)
+	//DownloadImage(c, "Rust.jpg")
 
 	DownloadImage(c, "java.jpg")
-	DownloadImage(c, "Rust.jpg")
+
 	//download an image
 
 }
