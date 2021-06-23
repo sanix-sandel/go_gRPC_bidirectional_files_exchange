@@ -17,14 +17,14 @@ const (
 func main() {
 	lis, err := net.Listen("tcp", port)
 
-	//create files directory
-	err := os.Mkdir("files", 0777)
-	if err != nil {
-		fmt.Println("Directry already exists")
-	}
-
 	if err != nil {
 		log.Fatal("failed to listen: %v", err)
+	}
+
+	//create files directory
+	err = os.Mkdir("files", 0777)
+	if err != nil {
+		fmt.Println("Directry already exists")
 	}
 
 	s := grpc.NewServer()
