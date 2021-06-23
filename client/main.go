@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	pb "tages/client/proto"
 	"time"
@@ -21,6 +24,8 @@ const (
 
 func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 	uploadImage(imageClient, "tmp/javascript.png")
+	uploadImage(imageClient, "tmp/python.png")
+	uploadImage(imageClient, "tmp/scala.png")
 }
 
 func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
@@ -28,6 +33,11 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 
 	if err != nil {
 		log.Fatal("cannot open image file: ", err)
+	}
+
+	stats, err := file.Stat()
+	if err != nil {
+		fmt.Println(err)
 	}
 
 	defer file.Close()
@@ -42,11 +52,14 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	}
 	fil_n := strings.Split(imagePath, "/")
 	filename := fil_n[len(fil_n)-1]
+
 	req := &pb.UploadImageRequest{
 		Data: &pb.UploadImageRequest_Info{
 			Info: &pb.ImageInfo{
-				Name:      filename,
-				ImageType: filepath.Ext(imagePath),
+				Name: filename,
+				//ImageType: filepath.Ext(imagePath),
+				Created:  stats.ModTime().String(),
+				Modified: stats.ModTime().String(),
 			},
 		},
 	}
@@ -89,6 +102,75 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	log.Printf("image uploaded with name: %s, size: %d", res.GetName(), res.GetSize())
 }
 
+/*
+func logError(err error) error {
+	if err != nil {
+		log.Print(err)
+	}
+	return err
+}
+*/
+func Save(imageName string, imageData bytes.Buffer) (string, error) {
+	filename := path.Join("files", imageName)
+	//data := bufio.NewWriter(&imageData)
+	err := ioutil.WriteFile(filename, imageData.Bytes(), 0777)
+	if err != nil {
+		return "", fmt.Errorf("cannot write image to file: %w", err)
+	}
+	return imageName, nil
+}
+
+func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
+
+	/*req, err:=stream.Recv()
+	if err!=nil{
+		return
+	}*/
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := imageClient.DownloadImage(ctx, &wrappers.StringValue{Value: filename})
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	res, err := stream.Recv()
+	if err != nil {
+		fmt.Println("cannot receive image info")
+	}
+	fmt.Println(res)
+	///all image info
+
+	imageData := bytes.Buffer{}
+
+	for {
+		res, err := stream.Recv()
+		chunk := res.GetChunkdata()
+		size := len(chunk)
+
+		log.Println("chunck of %d received", size)
+
+		if err == io.EOF {
+			log.Println("No more date to receive")
+			break
+		}
+
+		_, err = imageData.Write(chunk)
+		if err != nil {
+			fmt.Printf("cannot write chunk data: %v", err)
+		}
+	}
+
+	imageName, err := Save(filename, imageData)
+	if err != nil {
+		fmt.Printf("cannot save image to the store: %v", err)
+	}
+
+	fmt.Printf("Downloaded image with name %s", imageName)
+
+}
+
 func main() {
 	conn, err := grpc.Dial(address, grpc.WithInsecure())
 
@@ -109,4 +191,9 @@ func main() {
 		log.Println(err)
 	}
 	log.Println(r)
+
+	DownloadImage(c, "java.jpg")
+	DownloadImage(c, "Rust.jpg")
+	//download an image
+
 }

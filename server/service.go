@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
+	"os"
 	"path"
 	pb "tages/service/proto"
 
@@ -25,7 +27,7 @@ func logError(err error) error {
 	return err
 }
 
-func (s *server) Save(imageName string, imageType string, imageData bytes.Buffer) (string, error) {
+func (s *server) Save(imageName string, imageData bytes.Buffer) (string, error) {
 
 	filename := path.Join("files", imageName)
 	//data := bufio.NewWriter(&imageData)
@@ -43,7 +45,7 @@ func (s *server) UploadImage(stream pb.ImageUploadService_UploadImageServer) err
 		return logError(status.Errorf(codes.Unknown, "cannot receive image info"))
 	}
 	imageName := req.GetInfo().GetName()
-	imageType := req.GetInfo().ImageType
+
 	fmt.Println(imageName)
 
 	imageData := bytes.Buffer{}
@@ -71,7 +73,7 @@ func (s *server) UploadImage(stream pb.ImageUploadService_UploadImageServer) err
 	}
 
 	//create and save the image here
-	imageName, err = s.Save(imageName, imageType, imageData)
+	imageName, err = s.Save(imageName, imageData)
 	if err != nil {
 		return logError(status.Errorf(codes.Internal, "cannot save image to the store: %v", err))
 	}
@@ -107,7 +109,7 @@ func (s *server) ListImages(ctx context.Context, message *wrappers.StringValue) 
 			fmt.Println(err)
 		}
 
-		file := &pb.ImageInfo{Name: f.Name(), ImageType: "date"} //f.ModTime()
+		file := &pb.ImageInfo{Name: f.Name(), Created: f.ModTime().String(), Modified: f.ModTime().String()} //f.ModTime()
 		//log.Println("filename : ", stats.Name())
 		//log.Println("file size : ", stats.Size())
 		//log.Println("file date : ", stats.ModTime())
@@ -117,4 +119,69 @@ func (s *server) ListImages(ctx context.Context, message *wrappers.StringValue) 
 	images := &pb.ImageList{Images: liste}
 
 	return images, status.New(codes.OK, "").Err()
+}
+
+func (s *server) DownloadImage(filename *wrappers.StringValue, stream pb.ImageUploadService_DownloadImageServer) error {
+
+	//find file in the repository
+	imagePath := "files/" + filename.Value
+	file, err := os.Open(imagePath)
+	if err != nil {
+		log.Fatal("cannot open image file: ", err)
+	}
+	stats, err := file.Stat()
+	if err != nil {
+		log.Fatal("cannot open image file: ", err)
+	}
+	defer file.Close()
+
+	res := &pb.DownloadImageResponse{
+		Data: &pb.DownloadImageResponse_Info{
+			Info: &pb.ImageInfo{
+				Name:     filename.Value,
+				Created:  stats.ModTime().String(),
+				Modified: stats.ModTime().String(),
+			},
+		},
+	}
+
+	err = stream.Send(res)
+
+	if err != nil {
+		log.Fatal("cannot send file to the client: ", err, stream)
+	}
+
+	reader := bufio.NewReader(file)
+	buffer := make([]byte, 1024)
+
+	for {
+		n, err := reader.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal("cannot read chunck to buffer: ", err)
+		}
+
+		res := &pb.DownloadImageResponse{
+			Data: &pb.DownloadImageResponse_Chunkdata{
+				Chunkdata: buffer[:n],
+			},
+		}
+
+		err = stream.Send(res)
+		if err != nil {
+			log.Fatal("cannot send chunk to the client: ", err)
+		}
+	}
+
+	//res1, err := stream.CloseAndRecv()
+	if err != nil {
+		log.Fatal("cannot receive response: ", err)
+	}
+
+	log.Printf("image served with name: %s ", filename.Value)
+
+	return nil
+
 }

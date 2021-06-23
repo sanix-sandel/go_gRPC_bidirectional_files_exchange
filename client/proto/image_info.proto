@@ -3,7 +3,7 @@ syntax = "proto3";
 package proto;
 
 import "google/protobuf/wrappers.proto";
-
+//import "google/protobuf/timestamp.proto";
 
 //for uploading image
 message UploadImageRequest{
@@ -15,7 +15,8 @@ message UploadImageRequest{
 
 message ImageInfo {
     string name=1;
-    string image_type = 2;
+    string created = 2;
+    string modified=3;
 }
   
 message UploadImageResponse {
@@ -26,8 +27,6 @@ message UploadImageResponse {
 message ImageList{
     repeated ImageInfo images= 1;
 }
-/*
-//for list of all images
 
 
 //for downloading image
@@ -39,12 +38,13 @@ message DownloadImageResponse{
     oneof data{
         ImageInfo info=1;
         bytes chunkdata=2;
-    }
+    };
 }
-*/
+
+
 service ImageUploadService{
     rpc UploadImage(stream UploadImageRequest)returns (UploadImageResponse){};
     rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
-   // rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
+    rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
 
 }
