@@ -12,6 +12,7 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"syscall"
 	pb "tages/client/proto"
 	"time"
 
@@ -34,6 +35,10 @@ func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 	uploadImage(imageClient, "tmp/scala.png")
 }
 
+func timespectotime(ts syscall.Timespec) time.Time {
+	return time.Unix(int64(ts.Sec), int64(ts.Nsec))
+}
+
 func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	mutex.Lock()
 
@@ -44,6 +49,8 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	}
 
 	stats, err := file.Stat()
+
+	stat_t := stats.Sys().(*syscall.Stat_t)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -66,8 +73,8 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 			Info: &pb.ImageInfo{
 				Name: filename,
 				//ImageType: filepath.Ext(imagePath),
-				Created:  stats.ModTime().String(),
-				Modified: stats.ModTime().String(),
+				Created:  timespectotime(stat_t.Ctim).String(), //stats.ModTime().String(),
+				Modified: timespectotime(stat_t.Mtim).String(), //stats.ModTime().String(),
 			},
 		},
 	}
@@ -209,20 +216,20 @@ func main() {
 	//testUploadImage(c)
 
 	//Получить файл от сервис
-	DownloadImage(c, "java.jpg")
+	DownloadImage(c, "Java.jpg")
 	//for i := 0; i < 15; i++ {
 	//	go DownloadImage(c, "java.jpg")
 	//}
 
 	//Одновременно загрузить 6 файлов и получить списку файлов
-	liste := []string{"tmp/chicago.jpg", "tmp/index.jpeg", "tmp/javascript.png", "tmp/new_york.jpg", "tmp/python.png", "tmp/scala.png"}
+	liste := []string{"tmp/chicago.jpg", "tmp/canada.jpeg", "tmp/javascript.png", "tmp/new_york.jpg", "tmp/python.png", "tmp/scala.png"}
 	for i := 0; i < 6; i++ {
 		go uploadImage(c, liste[i])
 		go getImagesList(c)
 	}
 	getFilesLimiter.WaitAllDone()
 	upDownLoadLimiter.WaitAllDone()
-	go getImagesList(c)
+
 	//
 
 	//Running getImagesList concurrently (Одновременно)
