@@ -2,45 +2,20 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"path"
-	"sync"
 	pb "tages/service/proto"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type server struct {
-	filesMap DiskFileStore
-	//filesList []*ImageInfo
-}
-
-//storage-related
-type FileStore interface {
-	Save(imageName string, imageType string, imageData bytes.Buffer)
-}
-
-type DiskFileStore struct {
-	mutex       sync.RWMutex
-	imageFolder string
-	images      map[string]*ImageInfo
-}
-
-type ImageInfo struct {
-	name string
-	Type string
-	Path string
-}
-
-func NewFileStore(imageFolder string) *DiskFileStore {
-	return &DiskFileStore{
-		imageFolder: imageFolder,
-		images:      make(map[string]*ImageInfo),
-	}
 }
 
 func logError(err error) error {
@@ -50,24 +25,7 @@ func logError(err error) error {
 	return err
 }
 
-func (store *DiskFileStore) Save(imageName string, imageType string, imageData bytes.Buffer) (string, error) {
-	/*imageID, err := uuid.NewRandom()
-	  if err != nil {
-	      return "", fmt.Errorf("cannot generate image id: %w", err)
-	  }*/
-
-	/*imagePath := fmt.Sprintf("%s/%s%s", store.imageFolder, imageName, imageType)
-
-	file, err := os.Create(imagePath)
-	if err != nil {
-		return "", fmt.Errorf("cannot create image file: %w", err)
-	}
-
-	_, err = imageData.WriteTo(file)
-
-	if err != nil {
-		return "", fmt.Errorf("cannot write image to file: %w", err)
-	}*/
+func (s *server) Save(imageName string, imageType string, imageData bytes.Buffer) (string, error) {
 
 	filename := path.Join("files", imageName)
 	//data := bufio.NewWriter(&imageData)
@@ -75,16 +33,6 @@ func (store *DiskFileStore) Save(imageName string, imageType string, imageData b
 	if err != nil {
 		return "", fmt.Errorf("cannot write image to file: %w", err)
 	}
-
-	store.mutex.Lock()
-	defer store.mutex.Unlock()
-
-	/*store.images[imageName] = &ImageInfo{
-		name: imageName,
-		Type: imageType,
-		Path: filename, //imagePath,
-	}*/
-
 	return imageName, nil
 }
 
@@ -123,7 +71,7 @@ func (s *server) UploadImage(stream pb.ImageUploadService_UploadImageServer) err
 	}
 
 	//create and save the image here
-	imageName, err = s.filesMap.Save(imageName, imageType, imageData)
+	imageName, err = s.Save(imageName, imageType, imageData)
 	if err != nil {
 		return logError(status.Errorf(codes.Internal, "cannot save image to the store: %v", err))
 	}
@@ -143,27 +91,30 @@ func (s *server) UploadImage(stream pb.ImageUploadService_UploadImageServer) err
 	return nil
 }
 
-/*
-func (s *server)ListImage(ctx context.Context,
-	message *wrappers.StringValue)(*pb.ImageList, error){
+func (s *server) ListImages(ctx context.Context, message *wrappers.StringValue) (*pb.ImageList, error) {
 
-	files, err:=ioutil.ReadDir("./temp")
-	err!=nil{
+	liste := []*pb.ImageInfo{}
+
+	files, err := ioutil.ReadDir("./files")
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, f:=range files{
-		stats, err:=os.Stat(f)
-		log.Println("filename : ", stats.Name())
-		log.Println("filename : ", stats.Size())
-		log.Println("filename : ", stats.ModTime())
+	for _, f := range files {
+
+		//stats, err := os.Stat(f)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		file := &pb.ImageInfo{Name: f.Name(), ImageType: "date"} //f.ModTime()
+		//log.Println("filename : ", stats.Name())
+		//log.Println("file size : ", stats.Size())
+		//log.Println("file date : ", stats.ModTime())
+		liste = append(liste, file)
 	}
+
+	images := &pb.ImageList{Images: liste}
+
+	return images, status.New(codes.OK, "").Err()
 }
-*/
-
-//func (s *server)DownloadImage(imageName *wrappers.StringValue,
-//		stream pb.ImageUploadService_DownloadloadImageServer)error{
-
-//check filename existence in map or directory
-//send file by chunk
-//}

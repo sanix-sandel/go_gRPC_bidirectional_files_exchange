@@ -15,18 +15,19 @@ message UploadImageRequest{
 
 message ImageInfo {
     string name=1;
-    string image_type = 2;
+    google.protobuf.Timestamp created = 2;
+    google.protobuf.Timestamp modified=3;
 }
   
 message UploadImageResponse {
     string name = 1;
     uint32 size = 2;
 }
-/*
-//for list of all images
+
 message ImageList{
     repeated ImageInfo images= 1;
 }
+
 
 //for downloading image
 message DownloadImageRequest{
@@ -42,7 +43,7 @@ message DownloadImageResponse{
 */
 service ImageUploadService{
     rpc UploadImage(stream UploadImageRequest)returns (UploadImageResponse){};
-  //  rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
-   // rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
+    rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
+    rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
 
 }

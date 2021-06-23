@@ -22,11 +22,13 @@ message UploadImageResponse {
     string name = 1;
     uint32 size = 2;
 }
-/*
-//for list of all images
+
 message ImageList{
     repeated ImageInfo images= 1;
 }
+/*
+//for list of all images
+
 
 //for downloading image
 message DownloadImageRequest{
@@ -42,7 +44,7 @@ message DownloadImageResponse{
 */
 service ImageUploadService{
     rpc UploadImage(stream UploadImageRequest)returns (UploadImageResponse){};
-  //  rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
+    rpc ListImages(google.protobuf.StringValue)returns(ImageList){};
    // rpc DownloadImage(google.protobuf.StringValue)returns(stream DownloadImageResponse){};
 
 }

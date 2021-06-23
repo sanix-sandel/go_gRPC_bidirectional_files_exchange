@@ -11,6 +11,7 @@ import (
 	pb "tages/client/proto"
 	"time"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc"
 )
 
@@ -100,4 +101,12 @@ func main() {
 	c := pb.NewImageUploadServiceClient(conn)
 	testUploadImage(c)
 
+	//list all images
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	r, err := c.ListImages(ctx, &wrappers.StringValue{Value: ""})
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(r)
 }
