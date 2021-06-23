@@ -25,9 +25,8 @@ const (
 )
 
 var mutex = &sync.Mutex{}
-var limiter = goccm.New(3)
-
-//var wg sync.WaitGroup
+var getFilesLimiter = goccm.New(100)
+var upDownLoadLimiter = goccm.New(10)
 
 func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 	uploadImage(imageClient, "tmp/javascript.png")
@@ -36,10 +35,6 @@ func testUploadImage(imageClient pb.ImageUploadServiceClient) {
 }
 
 func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
-
-	//rate limiting
-	//var limiter = rate.NewLimiter(10, 1)
-
 	mutex.Lock()
 
 	file, err := os.Open(imagePath)
@@ -58,9 +53,6 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	//if err := limiter.Wait(ctx); err != nil {
-	//	fmt.Println("Request exceeded")
-	//}
 	stream, err := imageClient.UploadImage(ctx)
 
 	if err != nil {
@@ -117,16 +109,9 @@ func uploadImage(imageClient pb.ImageUploadServiceClient, imagePath string) {
 
 	mutex.Unlock()
 	log.Printf("image uploaded with name: %s, size: %d", res.GetName(), res.GetSize())
+	upDownLoadLimiter.Done()
 }
 
-/*
-func logError(err error) error {
-	if err != nil {
-		log.Print(err)
-	}
-	return err
-}
-*/
 func Save(imageName string, imageData bytes.Buffer) (string, error) {
 	filename := path.Join("files", imageName)
 	//data := bufio.NewWriter(&imageData)
@@ -139,41 +124,23 @@ func Save(imageName string, imageData bytes.Buffer) (string, error) {
 
 func getImagesList(imageClient pb.ImageUploadServiceClient) {
 
-	//var limiter = rate.NewLimiter(1, 1)
-	//defer wg.Done()
-	//list all images
-
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 
-	//limiting
-	//if err := limiter.Wait(ctx); err != nil {
-	//		fmt.Println("Request exceeded")
-	//	}
 	defer cancel()
 	r, err := imageClient.ListImages(ctx, &wrappers.StringValue{Value: ""})
 	if err != nil {
 		log.Println(err)
 	}
 	log.Println(r)
-	limiter.Done()
+	getFilesLimiter.Done()
 }
 
 func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
 
-	/*req, err:=stream.Recv()
-	if err!=nil{
-		return
-	}*/
-
 	mutex.Lock()
-	//rate limiting
-	//var limiter = rate.NewLimiter(10, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	//if err := limiter.Wait(ctx); err != nil {
-	//	fmt.Println("Request exceeded")
-	//}
 
 	stream, err := imageClient.DownloadImage(ctx, &wrappers.StringValue{Value: filename})
 	if err != nil {
@@ -213,6 +180,7 @@ func DownloadImage(imageClient pb.ImageUploadServiceClient, filename string) {
 	}
 	mutex.Unlock()
 	fmt.Printf("Downloaded image with name %s", imageName)
+	upDownLoadLimiter.Done()
 
 }
 
@@ -237,19 +205,32 @@ func main() {
 
 	c := pb.NewImageUploadServiceClient(conn)
 
-	go testUploadImage(c)
-	//wg.Add(100)
-	/*for i := 0; i < 11; i++ {
+	//Загрузить файл
+	//testUploadImage(c)
 
+	//Получить файл от сервис
+	DownloadImage(c, "java.jpg")
+	//for i := 0; i < 15; i++ {
+	//	go DownloadImage(c, "java.jpg")
+	//}
+
+	//Одновременно загрузить 6 файлов и получить списку файлов
+	liste := []string{"tmp/chicago.jpg", "tmp/index.jpeg", "tmp/javascript.png", "tmp/new_york.jpg", "tmp/python.png", "tmp/scala.png"}
+	for i := 0; i < 6; i++ {
+		go uploadImage(c, liste[i])
 		go getImagesList(c)
 	}
-	limiter.WaitAllDone()*/
+	getFilesLimiter.WaitAllDone()
+	upDownLoadLimiter.WaitAllDone()
+	go getImagesList(c)
+	//
 
-	//wg.Wait()
-
-	//DownloadImage(c, "Rust.jpg")
-
-	DownloadImage(c, "java.jpg")
+	//Running getImagesList concurrently (Одновременно)
+	//100 конкурентых запросов одновременно
+	/*for i := 0; i < 300; i++ {
+		go getImagesList(c)
+	}
+	getFilesLimiter.WaitAllDone()*/
 
 	fmt.Println("Program ended")
 
