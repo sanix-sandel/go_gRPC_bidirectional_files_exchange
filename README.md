@@ -1,4 +1,4 @@
-# tages_jump
+# File upload and download with GRPC (implemented with Golang)
 
 Сервис :
 cd server
